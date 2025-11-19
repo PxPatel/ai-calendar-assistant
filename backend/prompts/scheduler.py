@@ -88,7 +88,7 @@ def format_calendar_state(events: List[CalendarEvent]) -> str:
             end_time = event.end.strftime('%I:%M%p').lstrip('0')
             event_type = '[FIXED]' if not event.is_flexible else '[FLEXIBLE]'
 
-            lines.append(f"  " {start_time}-{end_time} {event.title} {event_type}")
+            lines.append(f"  • {start_time}-{end_time} {event.title} {event_type}")
 
     return '\n'.join(lines)
 
