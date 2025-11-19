@@ -13,6 +13,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import logging
 
 from backend.schemas.calendar_event import CalendarEvent
 import config
@@ -20,6 +21,9 @@ import config
 
 # Scopes required for Google Calendar access
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+
+# Suppress googleapiclient discovery cache warnings
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 
 class GoogleCalendarClient:
@@ -78,8 +82,8 @@ class GoogleCalendarClient:
                 with open(self.token_file, 'wb') as token:
                     pickle.dump(self.creds, token)
 
-            # Build the service
-            self.service = build('calendar', 'v3', credentials=self.creds)
+            # Build the service (cache_discovery=False to suppress warnings)
+            self.service = build('calendar', 'v3', credentials=self.creds, cache_discovery=False)
             return True
 
         except FileNotFoundError as e:
