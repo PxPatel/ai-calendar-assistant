@@ -62,9 +62,11 @@ class SchedulerService:
         if end_date.tzinfo is None:
             end_date = self.tz.localize(end_date)
 
-        # Filter to only FIXED events (flexible events can be moved)
+        # Filter to only FIXED events when finding gaps
+        # Flexible events CAN be moved, so we don't block time slots for them initially
+        # However, the final conflict check will verify against ALL events
         fixed_events = [e for e in events if not e.is_flexible]
-        logger.info(f"Found {len(fixed_events)} fixed events out of {len(events)} total")
+        logger.info(f"Found {len(fixed_events)} fixed events out of {len(events)} total (flexible events can be rescheduled)")
 
         # Iterate through each day
         current_date = start_date.date()
@@ -135,7 +137,8 @@ class SchedulerService:
         self,
         new_start: datetime,
         new_end: datetime,
-        existing_events: List[CalendarEvent]
+        existing_events: List[CalendarEvent],
+        check_all_events: bool = True
     ) -> Tuple[bool, Optional[CalendarEvent]]:
         """
         Check if a proposed event conflicts with existing events
@@ -144,21 +147,51 @@ class SchedulerService:
             new_start: Proposed event start time
             new_end: Proposed event end time
             existing_events: List of existing calendar events
+            check_all_events: If True, check all events. If False, only check fixed events.
 
         Returns:
             Tuple of (has_conflict: bool, conflicting_event: Optional[CalendarEvent])
         """
-        # Only check against FIXED events (flexible events can be moved)
-        fixed_events = [e for e in existing_events if not e.is_flexible]
+        # By default, check ALL events to prevent double-booking
+        # Only check fixed events if explicitly requested
+        events_to_check = existing_events if check_all_events else [e for e in existing_events if not e.is_flexible]
 
-        for event in fixed_events:
+        for event in events_to_check:
             # Check for overlap
             # Events overlap if: new_start < event.end AND new_end > event.start
             if new_start < event.end and new_end > event.start:
-                logger.warning(f"Conflict detected with: {event.title}")
+                logger.warning(f"Conflict detected with: {event.title} (flexible={event.is_flexible})")
                 return True, event
 
         return False, None
+
+    def get_conflicting_flexible_events(
+        self,
+        new_start: datetime,
+        new_end: datetime,
+        existing_events: List[CalendarEvent]
+    ) -> List[CalendarEvent]:
+        """
+        Get list of flexible events that conflict with proposed time
+
+        Args:
+            new_start: Proposed event start time
+            new_end: Proposed event end time
+            existing_events: List of existing calendar events
+
+        Returns:
+            List of flexible events that conflict
+        """
+        conflicting_flexible = []
+
+        for event in existing_events:
+            # Only check flexible events
+            if event.is_flexible:
+                # Check for overlap
+                if new_start < event.end and new_end > event.start:
+                    conflicting_flexible.append(event)
+
+        return conflicting_flexible
 
     def can_fit_duration(
         self,

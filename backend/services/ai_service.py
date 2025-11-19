@@ -228,23 +228,49 @@ class AIService:
                     else:
                         raise Exception(f"Generated schedule is invalid: {error_msg}")
 
-                # Check for conflicts with existing events
+                # Check for conflicts with existing events (checks ALL events, not just fixed)
+                conflicts_found = []
+                flexible_conflicts = []
+
                 for block in schedule_plan.scheduled_blocks:
                     start_dt, end_dt = block.to_datetime(self.scheduler_service.timezone)
+
+                    # Check for any conflicts
                     has_conflict, conflicting_event = self.scheduler_service.has_conflict(
                         new_start=start_dt,
                         new_end=end_dt,
-                        existing_events=calendar_events
+                        existing_events=calendar_events,
+                        check_all_events=True
                     )
 
                     if has_conflict:
-                        logger.error(f"Conflict detected with: {conflicting_event.title}")
+                        conflicts_found.append((block, conflicting_event))
+
+                        # Track if it's a flexible event
+                        if conflicting_event.is_flexible:
+                            flexible_conflicts.append(conflicting_event)
+
+                if conflicts_found:
+                    # If all conflicts are with flexible events, we can suggest moving them
+                    if len(flexible_conflicts) == len(conflicts_found):
+                        conflict_names = [e.title for e in flexible_conflicts]
+                        logger.warning(f"Conflicts with flexible events: {conflict_names}")
+                        # Add note to the schedule plan about flexible events
+                        schedule_plan.conflicts_resolved.append(
+                            f"Note: {len(flexible_conflicts)} flexible event(s) may need to be moved: {', '.join(conflict_names)}"
+                        )
+                        # Don't raise error - user can decide whether to move flexible events
+                        logger.info("Allowing schedule despite flexible event conflicts (user can move them)")
+                    else:
+                        # There are conflicts with FIXED events - this is a problem
+                        logger.error(f"Conflict detected with fixed event")
                         if attempt < max_retries - 1:
-                            prompt += f"\n\nCONFLICT DETECTED: Your proposed block overlaps with {conflicting_event.title}. Select different slots."
+                            conflict_msg = f"\n\nCONFLICT DETECTED: Your proposed blocks overlap with existing events. Select different slots that don't conflict."
+                            prompt += conflict_msg
                             continue
                         else:
                             raise Exception(
-                                f"Generated schedule conflicts with existing event: {conflicting_event.title}"
+                                f"Generated schedule conflicts with existing fixed events. Unable to find non-conflicting slots."
                             )
 
                 logger.info(f"Successfully generated valid schedule with {len(schedule_plan.scheduled_blocks)} blocks")

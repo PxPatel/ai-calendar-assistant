@@ -190,11 +190,18 @@ def display_chat_interface():
     # Example prompts
     with st.expander("💡 Example Prompts"):
         st.markdown("""
+        **Schedule Tasks** (AI finds optimal times):
         - "Schedule 3 hours for my CS homework due Friday"
-        - "Add a meeting with Prof. Smith tomorrow at 2pm for 30 minutes"
         - "I need 5 hours for my AI project before Monday, high priority"
         - "Block 2 hours for gym this week, preferably mornings"
-        - "Study for finals tomorrow"
+
+        **Create Events** (specific date/time):
+        - "Add a meeting with Prof. Smith tomorrow at 2pm for 30 minutes"
+        - "Create a dentist appointment next Tuesday at 10am for 1 hour"
+
+        **Query Calendar**:
+        - "When am I free today?"
+        - "Show me my schedule for this week"
         """)
 
     # Show confirmation buttons if awaiting user confirmation
@@ -279,8 +286,91 @@ Click **"Create These Events"** above to add them to your calendar, or **"Cancel
                 # Set awaiting confirmation
                 st.session_state.awaiting_confirmation = True
 
+            elif intent.action == 'create_event':
+                # For create_event with specific datetime
+                with st.spinner("Creating your event..."):
+                    import pytz
+                    tz = pytz.timezone(config.TIMEZONE)
+
+                    # Use specific_datetime if provided, otherwise use deadline
+                    event_start = intent.specific_datetime
+                    if not event_start:
+                        st.session_state.chat_history.append({
+                            'role': 'assistant',
+                            'content': "❌ I need a specific date and time to create an event. Please specify when you want this event (e.g., 'tomorrow at 2pm')."
+                        })
+                        st.rerun()
+                        return
+
+                    # Calculate end time
+                    from datetime import timedelta
+                    event_end = event_start + timedelta(minutes=intent.duration_minutes)
+
+                    # Check for conflicts
+                    scheduler = st.session_state.ai_service.scheduler_service
+                    has_conflict, conflicting_event = scheduler.has_conflict(
+                        new_start=event_start,
+                        new_end=event_end,
+                        existing_events=st.session_state.calendar_events
+                    )
+
+                    if has_conflict:
+                        response = f"""⚠️ **Conflict detected!**
+
+Your requested time conflicts with:
+- **{conflicting_event.title}** ({conflicting_event.start.strftime('%I:%M%p')} - {conflicting_event.end.strftime('%I:%M%p')})
+
+Would you like me to:
+1. Find a different time slot for this event?
+2. Move the conflicting event (if it's flexible)?
+
+Please rephrase your request or try a different time."""
+                    else:
+                        # No conflict - create the event directly
+                        result = st.session_state.calendar_client.create_event(
+                            title=intent.task_name,
+                            start=event_start,
+                            end=event_end,
+                            description=f"Priority: {intent.priority}\n{intent.notes or ''}",
+                            attendees=intent.attendees
+                        )
+
+                        if result:
+                            response = f"""✅ **Event created successfully!**
+
+**{intent.task_name}**
+- **When**: {event_start.strftime('%A, %B %d at %I:%M%p')}
+- **Duration**: {intent.duration_minutes} minutes
+
+The event has been added to your Google Calendar."""
+
+                            # Refresh calendar
+                            load_calendar_events()
+                        else:
+                            response = "❌ Failed to create the event. Please try again."
+
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': response
+                    })
+
+            elif intent.action == 'query_calendar':
+                # Query calendar for availability or information
+                response = f"""📅 **Calendar Query**
+
+{intent.get_readable_summary()}
+
+Currently showing events for the next {config.DEFAULT_DAYS_AHEAD} days.
+
+You have {len(st.session_state.calendar_events)} upcoming events."""
+
+                st.session_state.chat_history.append({
+                    'role': 'assistant',
+                    'content': response
+                })
+
             else:
-                # For other actions (create_event, query, etc), show parsed intent
+                # For other actions (modify_event, delete_event), show parsed intent
                 response = f"""✅ **I understood your request:**
 
 {intent.get_readable_summary()}
@@ -300,7 +390,7 @@ Click **"Create These Events"** above to add them to your calendar, or **"Cancel
                 if intent.specific_datetime:
                     response += f"- **Scheduled for**: {intent.specific_datetime.strftime('%Y-%m-%d %I:%M %p')}\n"
 
-                response += "\n*Full scheduling for all action types coming soon!*"
+                response += "\n*This action type is coming soon! For now, use schedule_task or create_event.*"
 
                 st.session_state.chat_history.append({
                     'role': 'assistant',
