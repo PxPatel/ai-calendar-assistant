@@ -37,7 +37,7 @@ class ScheduleBlock:
 
         return end_total_mins - start_total_mins
 
-    def to_datetime(self, timezone: str = 'America/New_York') -> tuple[datetime, datetime]:
+    def to_datetime(self, timezone: str = 'America/New_York') -> tuple:
         """
         Convert date + time strings to timezone-aware datetime objects
 
@@ -102,7 +102,7 @@ class SchedulePlan:
                 block.duration_minutes for block in self.scheduled_blocks
             )
 
-    def validate(self) -> tuple[bool, Optional[str]]:
+    def validate(self) -> tuple:
         """
         Validate the schedule plan
 
@@ -149,7 +149,7 @@ class SchedulePlan:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SchedulePlan':
+    def from_dict(cls, data: Dict[str, Any]):
         """Create SchedulePlan from dictionary"""
         blocks = [
             ScheduleBlock(**block_data)
@@ -168,7 +168,7 @@ class SchedulePlan:
         if not self.scheduled_blocks:
             return "No time blocks scheduled"
 
-        lines = [f"=Å Scheduled {len(self.scheduled_blocks)} time block(s):"]
+        lines = [f"Scheduled {len(self.scheduled_blocks)} time block(s):"]
 
         for i, block in enumerate(self.scheduled_blocks, 1):
             # Format date nicely
@@ -195,7 +195,7 @@ class SchedulePlan:
 
             lines.append(f"  {i}. {day_name} @ {time_range} ({block.duration_minutes} min)")
             if block.reasoning:
-                lines.append(f"     =¡ {block.reasoning}")
+                lines.append(f"     {block.reasoning}")
 
         if self.summary:
             lines.append(f"\n{self.summary}")
