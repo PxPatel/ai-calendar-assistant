@@ -170,7 +170,7 @@ def get_next_weekday_iso(current_dt: datetime, target_day: str, end_of_day: bool
     if days_ahead == 0:
         days_ahead = 7  # Next week if it's the same day
 
-    target_date = current_dt + datetime.timedelta(days=days_ahead)
+    target_date = current_dt + timedelta(days=days_ahead)
 
     if end_of_day:
         target_date = target_date.replace(hour=23, minute=59, second=0, microsecond=0)
@@ -182,7 +182,7 @@ def get_next_weekday_iso(current_dt: datetime, target_day: str, end_of_day: bool
 
 def get_tomorrow_at_time(current_dt: datetime, hour: int, minute: int) -> str:
     """Get tomorrow at specific time in ISO format"""
-    tomorrow = current_dt + datetime.timedelta(days=1)
+    tomorrow = current_dt + timedelta(days=1)
     target_dt = tomorrow.replace(hour=hour, minute=minute, second=0, microsecond=0)
     return target_dt.isoformat()
 
@@ -193,13 +193,13 @@ def get_end_of_week(current_dt: datetime) -> str:
     if days_until_sunday == 0:
         days_until_sunday = 7
 
-    end_of_week = current_dt + datetime.timedelta(days=days_until_sunday)
+    end_of_week = current_dt + timedelta(days=days_until_sunday)
     end_of_week = end_of_week.replace(hour=23, minute=59, second=0, microsecond=0)
     return end_of_week.isoformat()
 
 
 def get_end_of_tomorrow(current_dt: datetime) -> str:
     """Get end of tomorrow in ISO format"""
-    tomorrow = current_dt + datetime.timedelta(days=1)
+    tomorrow = current_dt + timedelta(days=1)
     end_of_tomorrow = tomorrow.replace(hour=23, minute=59, second=0, microsecond=0)
     return end_of_tomorrow.isoformat()
