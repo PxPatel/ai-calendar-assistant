@@ -5,9 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Keys
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
+GOOGLE_GEMINI_MODEL = os.getenv("GOOGLE_GEMINI_MODEL", "gemini-1.5-flash")
+
+# Google Calendar OAuth (uses credentials.json in project root)
+CREDENTIALS_FILE = "credentials.json"
+TOKEN_FILE = "token.pickle"
 
 # Calendar Settings
 WORK_HOURS_START = 8  # 8 AM
