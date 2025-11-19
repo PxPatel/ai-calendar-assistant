@@ -197,6 +197,25 @@ def display_chat_interface():
         - "Study for finals tomorrow"
         """)
 
+    # Show confirmation buttons if awaiting user confirmation
+    if st.session_state.awaiting_confirmation and st.session_state.proposed_schedule:
+        st.info("⏳ Awaiting your confirmation to create these events...")
+
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("✅ Create These Events", type="primary", use_container_width=True):
+                handle_create_events()
+        with col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.awaiting_confirmation = False
+                st.session_state.proposed_schedule = None
+                st.session_state.current_intent = None
+                st.session_state.chat_history.append({
+                    'role': 'assistant',
+                    'content': "Schedule cancelled. Feel free to make a new request!"
+                })
+                st.rerun()
+
     # Chat history display
     chat_container = st.container()
     with chat_container:
@@ -212,8 +231,11 @@ def display_chat_interface():
         else:
             st.info("👋 Hello! I'm your AI calendar assistant. Type a scheduling request below to get started.")
 
-    # Chat input
-    user_input = st.chat_input("Type your scheduling request...")
+    # Chat input (disabled if awaiting confirmation)
+    user_input = st.chat_input(
+        "Type your scheduling request...",
+        disabled=st.session_state.awaiting_confirmation
+    )
 
     if user_input:
         # Add user message to chat history
@@ -227,8 +249,38 @@ def display_chat_interface():
             with st.spinner("Understanding your request..."):
                 # Parse intent using AI
                 intent = st.session_state.ai_service.parse_user_intent(user_input)
+                st.session_state.current_intent = intent
 
-                # Create response message
+            # For schedule_task action, generate schedule
+            if intent.action == 'schedule_task':
+                with st.spinner("Finding optimal time slots..."):
+                    schedule_plan = st.session_state.ai_service.generate_schedule_plan(
+                        user_intent=intent,
+                        calendar_events=st.session_state.calendar_events
+                    )
+
+                    st.session_state.proposed_schedule = schedule_plan
+
+                # Create response with proposed schedule
+                response = f"""✅ **I found optimal times for your task!**
+
+{schedule_plan.get_readable_summary()}
+
+---
+**Total Time**: {schedule_plan.total_scheduled_minutes} minutes ({schedule_plan.total_scheduled_minutes/60:.1f} hours)
+
+Click **"Create These Events"** above to add them to your calendar, or **"Cancel"** to try again."""
+
+                st.session_state.chat_history.append({
+                    'role': 'assistant',
+                    'content': response
+                })
+
+                # Set awaiting confirmation
+                st.session_state.awaiting_confirmation = True
+
+            else:
+                # For other actions (create_event, query, etc), show parsed intent
                 response = f"""✅ **I understood your request:**
 
 {intent.get_readable_summary()}
@@ -237,9 +289,10 @@ def display_chat_interface():
 📋 **Parsed Details:**
 - **Action**: {intent.action}
 - **Task**: {intent.task_name}
-- **Duration**: {intent.duration_minutes} minutes
-- **Priority**: {intent.priority}
 """
+
+                if intent.duration_minutes > 0:
+                    response += f"- **Duration**: {intent.duration_minutes} minutes\n"
 
                 if intent.deadline:
                     response += f"- **Deadline**: {intent.deadline.strftime('%Y-%m-%d %I:%M %p')}\n"
@@ -247,9 +300,8 @@ def display_chat_interface():
                 if intent.specific_datetime:
                     response += f"- **Scheduled for**: {intent.specific_datetime.strftime('%Y-%m-%d %I:%M %p')}\n"
 
-                response += "\n*Note: In Phase 2, I'll automatically find time slots and create calendar events.*"
+                response += "\n*Full scheduling for all action types coming soon!*"
 
-                # Add assistant response to chat history
                 st.session_state.chat_history.append({
                     'role': 'assistant',
                     'content': response
@@ -264,6 +316,54 @@ def display_chat_interface():
 
         # Rerun to update chat display
         st.rerun()
+
+
+def handle_create_events():
+    """Handle creation of events from proposed schedule"""
+    try:
+        with st.spinner("Creating calendar events..."):
+            result = st.session_state.calendar_client.create_events_from_plan(
+                schedule_plan=st.session_state.proposed_schedule,
+                user_intent=st.session_state.current_intent
+            )
+
+        # Build success message
+        if result['success_count'] > 0:
+            success_msg = f"""✅ **Successfully created {result['success_count']} calendar event(s)!**
+
+Your schedule has been added to your Google Calendar. Check the calendar view to see your new events.
+"""
+
+            if result['failed_blocks']:
+                success_msg += f"\n⚠️ Warning: {len(result['failed_blocks'])} event(s) failed to create."
+
+            st.session_state.chat_history.append({
+                'role': 'assistant',
+                'content': success_msg
+            })
+
+            # Refresh calendar to show new events
+            load_calendar_events()
+
+        else:
+            st.session_state.chat_history.append({
+                'role': 'assistant',
+                'content': "❌ Failed to create calendar events. Please try again."
+            })
+
+        # Reset state
+        st.session_state.awaiting_confirmation = False
+        st.session_state.proposed_schedule = None
+        st.session_state.current_intent = None
+
+    except Exception as e:
+        st.session_state.chat_history.append({
+            'role': 'assistant',
+            'content': f"❌ Error creating events: {str(e)}"
+        })
+        st.session_state.awaiting_confirmation = False
+
+    st.rerun()
 
 
 def main():
@@ -304,7 +404,7 @@ def main():
 
     # Footer
     st.divider()
-    st.caption("🚀 AI Calendar Assistant - Phase 1: Intent Parsing & Calendar Display")
+    st.caption("🚀 AI Calendar Assistant - Phase 2: Intelligent Scheduling & Event Creation")
 
 
 if __name__ == "__main__":
