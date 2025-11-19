@@ -38,6 +38,16 @@ def init_session_state():
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
 
+    # Phase 2: Scheduling state
+    if 'proposed_schedule' not in st.session_state:
+        st.session_state.proposed_schedule = None
+
+    if 'current_intent' not in st.session_state:
+        st.session_state.current_intent = None
+
+    if 'awaiting_confirmation' not in st.session_state:
+        st.session_state.awaiting_confirmation = False
+
 
 def initialize_clients():
     """Initialize Google Calendar and AI Service clients"""

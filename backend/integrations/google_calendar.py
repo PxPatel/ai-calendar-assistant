@@ -252,3 +252,99 @@ class GoogleCalendarClient:
         except Exception as e:
             print(f"Error deleting event: {e}")
             return False
+
+    def create_events_from_plan(
+        self,
+        schedule_plan,  # SchedulePlan object
+        user_intent,  # UserIntent object
+        calendar_id: str = 'primary'
+    ) -> dict:
+        """
+        Create multiple calendar events from a SchedulePlan
+
+        Args:
+            schedule_plan: SchedulePlan with time blocks
+            user_intent: Original user intent for context
+            calendar_id: Calendar ID to create events in
+
+        Returns:
+            Dictionary with 'created_ids', 'failed_blocks', 'success_count'
+        """
+        from backend.schemas.schedule_plan import SchedulePlan, ScheduleBlock
+        from backend.schemas.user_intent import UserIntent
+
+        if not self.service:
+            if not self.authenticate():
+                raise Exception("Failed to authenticate with Google Calendar")
+
+        created_ids = []
+        failed_blocks = []
+
+        for i, block in enumerate(schedule_plan.scheduled_blocks, 1):
+            try:
+                # Convert block times to datetime
+                start_dt, end_dt = block.to_datetime(self.timezone)
+
+                # Build description
+                total_blocks = len(schedule_plan.scheduled_blocks)
+                description_parts = [
+                    "[FLEXIBLE]",  # Mark as flexible so we can reschedule if needed
+                    f"\nPart {i} of {total_blocks}",
+                    f"Task: {user_intent.task_name}",
+                    f"Priority: {user_intent.priority.upper()}",
+                ]
+
+                if user_intent.deadline:
+                    description_parts.append(
+                        f"Deadline: {user_intent.deadline.strftime('%Y-%m-%d %I:%M%p')}"
+                    )
+
+                if block.reasoning:
+                    description_parts.append(f"\n💡 {block.reasoning}")
+
+                if user_intent.notes:
+                    description_parts.append(f"\nNotes: {user_intent.notes}")
+
+                description = "\n".join(description_parts)
+
+                # Create event
+                event_body = {
+                    'summary': block.task_name,
+                    'description': description,
+                    'start': {
+                        'dateTime': start_dt.isoformat(),
+                        'timeZone': self.timezone,
+                    },
+                    'end': {
+                        'dateTime': end_dt.isoformat(),
+                        'timeZone': self.timezone,
+                    },
+                    'colorId': '10',  # Green color for flexible events
+                }
+
+                # Add attendees if specified
+                if user_intent.attendees:
+                    event_body['attendees'] = [{'email': email} for email in user_intent.attendees]
+
+                # Insert event
+                event = self.service.events().insert(
+                    calendarId=calendar_id,
+                    body=event_body
+                ).execute()
+
+                created_ids.append(event.get('id'))
+                print(f"✓ Created event: {block.task_name} on {block.date}")
+
+            except Exception as e:
+                print(f"✗ Failed to create event for {block.date} {block.start_time}: {e}")
+                failed_blocks.append({
+                    'block': block,
+                    'error': str(e)
+                })
+
+        return {
+            'created_ids': created_ids,
+            'failed_blocks': failed_blocks,
+            'success_count': len(created_ids),
+            'total_blocks': len(schedule_plan.scheduled_blocks)
+        }
