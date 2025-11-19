@@ -1,15 +1,14 @@
 """
 Google Gemini API Client
-Wrapper for Google's Generative AI (Gemini) API
+Wrapper for Google's Generative AI (Gemini) API using the latest google.genai SDK
 """
 import json
 import re
 import time
 from typing import Optional, Dict, Any
 
-import google.generativeai as genai
-from google.generativeai.types import GenerateContentResponse
-from google.api_core import exceptions
+from google import genai
+from google.genai import types
 
 
 class GeminiClient:
@@ -33,11 +32,8 @@ class GeminiClient:
         self.api_key = api_key
         self.model_name = model_name
 
-        # Configure the API
-        genai.configure(api_key=api_key)
-
-        # Initialize the model
-        self.model = genai.GenerativeModel(model_name)
+        # Initialize the client
+        self.client = genai.Client(api_key=api_key)
 
         # Statistics
         self.total_tokens = 0
@@ -68,43 +64,47 @@ class GeminiClient:
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
         # Configure generation settings
-        generation_config = genai.types.GenerationConfig(
-            max_output_tokens=max_tokens,
+        generation_config = types.GenerateContentConfig(
             temperature=temperature,
+            max_output_tokens=max_tokens,
         )
 
         # Retry logic with exponential backoff
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = self.model.generate_content(
-                    full_prompt,
-                    generation_config=generation_config
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=full_prompt,
+                    config=generation_config
                 )
 
                 # Extract text from response
                 if response.text:
                     self.request_count += 1
-                    # Note: Token counting may not be directly available in all SDK versions
-                    # We'll track requests instead
                     return response.text
                 else:
                     raise Exception("Empty response from Gemini API")
 
-            except exceptions.ResourceExhausted as e:
-                # Rate limit hit
-                if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 2  # Exponential backoff: 2s, 4s, 8s
-                    print(f"Rate limit hit, waiting {wait_time}s before retry...")
-                    time.sleep(wait_time)
-                else:
-                    raise Exception(f"Rate limit exceeded after {max_retries} retries: {e}")
-
-            except exceptions.InvalidArgument as e:
-                raise Exception(f"Invalid API request: {e}")
-
             except Exception as e:
-                if attempt < max_retries - 1:
+                error_str = str(e).lower()
+
+                # Check for rate limit errors
+                if 'rate' in error_str or 'quota' in error_str or '429' in error_str:
+                    if attempt < max_retries - 1:
+                        wait_time = (2 ** attempt) * 2  # Exponential backoff: 2s, 4s, 8s
+                        print(f"Rate limit hit, waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise Exception(f"Rate limit exceeded after {max_retries} retries: {e}")
+
+                # Check for invalid argument errors
+                elif 'invalid' in error_str or '400' in error_str:
+                    raise Exception(f"Invalid API request: {e}")
+
+                # Generic retry for other errors
+                elif attempt < max_retries - 1:
                     wait_time = (2 ** attempt)
                     print(f"Error occurred, retrying in {wait_time}s: {e}")
                     time.sleep(wait_time)
