@@ -12,6 +12,12 @@ GOOGLE_GEMINI_MODEL = os.getenv("GOOGLE_GEMINI_MODEL", "gemini-1.5-flash")
 CREDENTIALS_FILE = "credentials.json"
 TOKEN_FILE = "token.pickle"
 
+# Calendar Embed Settings
+# Get your embed URL from Google Calendar Settings > Integrate calendar
+# Or leave as None to show table view
+CALENDAR_EMBED_URL = os.getenv("CALENDAR_EMBED_URL", None)
+CALENDAR_EMBED_HEIGHT = 600  # Height of embedded calendar in pixels
+
 # Calendar Settings
 WORK_HOURS_START = 8  # 8 AM
 WORK_HOURS_END = 22   # 10 PM

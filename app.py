@@ -89,20 +89,65 @@ def load_calendar_events():
         return []
 
 
+def get_calendar_email():
+    """Get the primary calendar email address"""
+    try:
+        if st.session_state.calendar_client and st.session_state.calendar_client.service:
+            calendar_list = st.session_state.calendar_client.service.calendarList().get(
+                calendarId='primary'
+            ).execute()
+            return calendar_list.get('id', None)
+    except Exception as e:
+        print(f"Error getting calendar email: {e}")
+    return None
+
+
 def display_calendar_view():
     """Display calendar events in the left column"""
     st.header("📅 Your Calendar")
 
-    # Refresh button
-    col1, col2 = st.columns([1, 3])
+    # View toggle and refresh button
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
-        if st.button("🔄 Refresh Calendar"):
+        view_mode = st.selectbox(
+            "View",
+            ["Embedded", "Table"],
+            label_visibility="collapsed",
+            key="calendar_view_mode"
+        )
+    with col2:
+        if st.button("🔄 Refresh"):
             load_calendar_events()
             st.rerun()
 
-    # Display events
+    # Display embedded calendar or table based on view mode
+    if view_mode == "Embedded":
+        # Get calendar email/ID
+        calendar_email = get_calendar_email()
+
+        if calendar_email:
+            # Construct Google Calendar embed URL
+            # Use simple mode with current week view
+            embed_url = f"https://calendar.google.com/calendar/embed?src={calendar_email}&mode=WEEK&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0"
+
+            # Display embedded calendar
+            st.components.v1.iframe(
+                src=embed_url,
+                height=config.CALENDAR_EMBED_HEIGHT,
+                scrolling=True
+            )
+            st.caption("🔵 Your Google Calendar (Week View)")
+        else:
+            st.warning("⚠️ Unable to load embedded calendar. Showing table view instead.")
+            display_calendar_table()
+    else:
+        display_calendar_table()
+
+
+def display_calendar_table():
+    """Display calendar events as a table"""
     if not st.session_state.calendar_events:
-        st.info("No upcoming events found. Click 'Refresh Calendar' to load events.")
+        st.info("No upcoming events found. Click 'Refresh' to load events.")
     else:
         # Prepare data for display
         event_data = []
